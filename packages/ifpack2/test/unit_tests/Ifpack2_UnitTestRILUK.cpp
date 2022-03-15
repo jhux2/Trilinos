@@ -50,6 +50,7 @@
 #include <Teuchos_ConfigDefs.hpp>
 #include <Ifpack2_ConfigDefs.hpp>
 #include <Teuchos_UnitTestHarness.hpp>
+#include <Teuchos_StackedTimer.hpp>
 #include <Ifpack2_Version.hpp>
 #include <iostream>
 
@@ -148,21 +149,64 @@ TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL(Ifpack2RILUK, Parallel, Scalar, LocalOrdinal, 
 
 TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL(Ifpack2RILUK, ParallelReuse, Scalar, LocalOrdinal, GlobalOrdinal)
 {
-  std::string version = Ifpack2::Version();
-  out << "Ifpack2::Version(): " << version << std::endl;
+  Teuchos::RCP<const Teuchos::Comm<int>> comm = Tpetra::getDefaultComm();
+#if 1
   {
+    out << "IlukImplTypeDetails::Serial" << std::endl;
+    Teuchos::RCP<Teuchos::StackedTimer> stacked_timer;
+    stacked_timer = Teuchos::rcp(new Teuchos::StackedTimer("Ifpack2RILUK::ParallelReuse (SERIAL)"));
+    Teuchos::TimeMonitor::setStackedTimer(stacked_timer);
     auto prec = setupTest<Scalar, LocalOrdinal, GlobalOrdinal>(IlukImplTypeDetails::Serial);
     prec->initialize();
+    {
+    Teuchos::Time timer("RILUK::compute() 0");
+    Teuchos::TimeMonitor timeMon(timer);
     prec->compute();
+    }
     // Pretend we've updated some of the numbers in the matrix, but not its structure.
+    {
+    Teuchos::Time timer("RILUK::compute() 1");
+    Teuchos::TimeMonitor timeMon(timer);
     prec->compute();
+    }
+    {
+    Teuchos::Time timer("RILUK::compute() 2");
+    Teuchos::TimeMonitor timeMon(timer);
+    prec->compute();
+    }
+    stacked_timer->stopBaseTimer();
+    Teuchos::StackedTimer::OutputOptions options;
+    options.output_fraction = options.output_histogram = options.output_minmax = true;
+    stacked_timer->report(out, comm, options);
   }
+#endif
   {
+    out << "IlukImplTypeDetails::KSPILUK" << std::endl;
+    Teuchos::RCP<Teuchos::StackedTimer> stacked_timer;
+    stacked_timer = Teuchos::rcp(new Teuchos::StackedTimer("Ifpack2RILUK::ParallelReuse (KSPILUK)"));
+    Teuchos::TimeMonitor::setStackedTimer(stacked_timer);
     auto prec = setupTest<Scalar, LocalOrdinal, GlobalOrdinal>(IlukImplTypeDetails::KSPILUK);
     prec->initialize();
+    {
+    Teuchos::Time timer("RILUK::compute() 0");
+    Teuchos::TimeMonitor timeMon(timer);
     prec->compute();
+    }
     // Pretend we've updated some of the numbers in the matrix, but not its structure.
+    {
+    Teuchos::Time timer("RILUK::compute() 1");
+    Teuchos::TimeMonitor timeMon(timer);
     prec->compute();
+    }
+    {
+    Teuchos::Time timer("RILUK::compute() 2");
+    Teuchos::TimeMonitor timeMon(timer);
+    prec->compute();
+    }
+    stacked_timer->stopBaseTimer();
+    Teuchos::StackedTimer::OutputOptions options;
+    options.output_fraction = options.output_histogram = options.output_minmax = true;
+    stacked_timer->report(out, comm, options);
   }
 }
 
