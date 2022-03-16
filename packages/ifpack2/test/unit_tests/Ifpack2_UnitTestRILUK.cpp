@@ -167,8 +167,9 @@ static Teuchos::RCP<Ifpack2::RILUK<Tpetra::RowMatrix<Scalar,LocalOrdinal,GlobalO
   //GlobalOrdinal nx = 173, ny=173, nz=1; //30k rows
   //GlobalOrdinal nx = 273, ny=273, nz=1; //30k rows
   //Galeri::Xpetra::Parameters<GlobalOrdinal> GaleriParameters (clp, nx, ny, nz, "Laplace2D");
-  //GlobalOrdinal nx = 42, ny=42, nz=42; //75 rows
-  GlobalOrdinal nx = 46, ny=46, nz=46; //75 rows
+  //GlobalOrdinal nx = 42, ny=42, nz=42; //75k rows
+  GlobalOrdinal nx = 46, ny=46, nz=46; //100k rows
+  //GlobalOrdinal nx = 5, ny=5, nz=5;
   Galeri::Xpetra::Parameters<GlobalOrdinal> GaleriParameters (clp, nx, ny, nz, "Laplace3D");
   Xpetra::Parameters xpetraParameters (clp);
   Teuchos::ParameterList GaleriList = GaleriParameters.GetParameterList ();
