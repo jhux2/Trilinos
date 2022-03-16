@@ -586,12 +586,14 @@ void RILUK<MatrixType>::initialize ()
   ++numInitialize_;
   initializeTime_ += (timer.wallTime() - startTime);
 
+#ifdef JHU_DEBUG  
   printf("JHU: RILUK::initialize(): getLocalIndicesHost\n");
   fflush(stdout);
   A_local_crs_->getLocalIndicesHost(); //for debugging only
   printf("JHU: RILUK::initialize(): getLocalIndicesDevice\n");
   fflush(stdout);
   A_local_crs_->getLocalIndicesDevice(); //for debugging only
+#endif
 
 } //initialize()
 
@@ -762,12 +764,14 @@ void RILUK<MatrixType>::compute ()
   using Teuchos::ArrayView;
   const char prefix[] = "Ifpack2::RILUK::compute: ";
 
+#ifdef JHU_DEBUG  
   printf("JHU: RILUK::compute(): getLocalIndicesHost\n");
   fflush(stdout);
   A_local_crs_->getLocalIndicesHost(); //for debugging only
   printf("JHU: RILUK::compute(): getLocalIndicesDevice\n");
   fflush(stdout);
   A_local_crs_->getLocalIndicesDevice(); //for debugging only
+#endif
 
   // initialize() checks this too, but it's easier for users if the
   // error shows them the name of the method that they actually
@@ -966,8 +970,7 @@ void RILUK<MatrixType>::compute ()
       std::cout << "RILUK: sumIntoLocalValues, numCompute_=" << numCompute_ << std::endl;
       RCP<crs_matrix_type> A_local_crs_nc;
       if (A_local_crs_.is_null ()) {
-        printf("JHU: NEW code, A_local_crs_.is_null\n");
-        fflush(stdout);
+        //printf("JHU: NEW code, A_local_crs_.is_null\n"); fflush(stdout);
         local_ordinal_type numRows = A_local_->getLocalNumRows();
         Array<size_t> entriesPerRow(numRows);
         for(local_ordinal_type i = 0; i < numRows; i++) {
@@ -1012,8 +1015,7 @@ void RILUK<MatrixType>::compute ()
 #else
       std::cout << "RILUK: insertLocalValues" << std::endl;
       if (A_local_crs_.is_null ()) {
-        printf("JHU: OLD code, A_local_crs_.is_null\n");
-        fflush(stdout);
+        //printf("JHU: OLD code, A_local_crs_.is_null\n"); fflush(stdout);
         Teuchos::Time timer2("RILUK::compute::copyIntoLocalCrs");
         Teuchos::TimeMonitor timeMon2(timer2);
         local_ordinal_type numRows = A_local_->getLocalNumRows();
@@ -1037,12 +1039,14 @@ void RILUK<MatrixType>::compute ()
       }
 #endif
 
+#ifdef JHU_DEBUG  
   printf("JHU: A_local_crs_->getLocalMatrixDevice [before]: getLocalIndicesHost, numCompute_=%d\n",numCompute_);
   fflush(stdout);
   A_local_crs_->getLocalIndicesHost(); //for debugging only
   printf("JHU:  A_local_crs_->getLocalMatrixDevic [before]: getLocalIndicesDevice, numCompute_=%d\n",numCompute_);
   A_local_crs_->getLocalIndicesDevice(); //for debugging only
   fflush(stdout);
+#endif
       //auto lclMtx = A_local_crs_->getLocalMatrixDevice();
       //A_local_rowmap_  = lclMtx.graph.row_map;
       //A_local_entries_ = lclMtx.graph.entries;
@@ -1104,12 +1108,14 @@ void RILUK<MatrixType>::compute ()
       }
     }
 
+#ifdef JHU_DEBUG  
   printf("JHU: spiluk_numeric [after]: getLocalIndicesHost, numCompute_=%d\n",numCompute_);
   fflush(stdout);
   A_local_crs_->getLocalIndicesHost(); //for debugging only
   printf("JHU: spiluk_numeric [after]: getLocalIndicesDevice, numCompute_=%d\n",numCompute_);
   A_local_crs_->getLocalIndicesDevice(); //for debugging only
   fflush(stdout);
+#endif
     
     {
     Teuchos::Time timer2("RILUK::compute::fillCompleteLandU");
@@ -1128,12 +1134,14 @@ void RILUK<MatrixType>::compute ()
     }
   }
 
+#ifdef JHU_DEBUG  
   printf("JHU: RILUK::compute() [exit]: getLocalIndicesHost\n");
   fflush(stdout);
   A_local_crs_->getLocalIndicesHost(); //for debugging only
   printf("JHU: RILUK::compute() [exit]: getLocalIndicesDevice\n");
   A_local_crs_->getLocalIndicesDevice(); //for debugging only
   fflush(stdout);
+#endif
 
   isComputed_ = true;
   ++numCompute_;
