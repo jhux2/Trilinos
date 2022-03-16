@@ -585,6 +585,14 @@ void RILUK<MatrixType>::initialize ()
   isInitialized_ = true;
   ++numInitialize_;
   initializeTime_ += (timer.wallTime() - startTime);
+
+  printf("JHU: RILUK::initialize(): getLocalIndicesHost\n");
+  fflush(stdout);
+  A_local_crs_->getLocalIndicesHost(); //for debugging only
+  printf("JHU: RILUK::initialize(): getLocalIndicesDevice\n");
+  fflush(stdout);
+  A_local_crs_->getLocalIndicesDevice(); //for debugging only
+
 } //initialize()
 
 template<class MatrixType>
@@ -754,6 +762,13 @@ void RILUK<MatrixType>::compute ()
   using Teuchos::ArrayView;
   const char prefix[] = "Ifpack2::RILUK::compute: ";
 
+  printf("JHU: RILUK::compute(): getLocalIndicesHost\n");
+  fflush(stdout);
+  A_local_crs_->getLocalIndicesHost(); //for debugging only
+  printf("JHU: RILUK::compute(): getLocalIndicesDevice\n");
+  fflush(stdout);
+  A_local_crs_->getLocalIndicesDevice(); //for debugging only
+
   // initialize() checks this too, but it's easier for users if the
   // error shows them the name of the method that they actually
   // called, rather than the name of some internally called method.
@@ -770,6 +785,7 @@ void RILUK<MatrixType>::compute ()
   if (! isInitialized ()) {
     initialize (); // Don't count this in the compute() time
   }
+
 
   Teuchos::Time timer ("RILUK::compute");
 
@@ -945,14 +961,13 @@ void RILUK<MatrixType>::compute ()
   else {
     //KokkosKernels SPILUK
     {//Make sure values in A is picked up even in case of pattern reuse
-      RCP<const crs_matrix_type> A_local_crs =
-        rcp_dynamic_cast<const crs_matrix_type> (A_local_);
 #define RILUK_SUM_INTO
 #ifdef RILUK_SUM_INTO
-      std::cout << "RILUK: sumIntoLocalValues" << std::endl;
+      std::cout << "RILUK: sumIntoLocalValues, numCompute_=" << numCompute_ << std::endl;
       RCP<crs_matrix_type> A_local_crs_nc;
       if (A_local_crs_.is_null ()) {
-        std::cout << "JHU: A_local_crs_.is_null" << std::endl;
+        printf("JHU: NEW code, A_local_crs_.is_null\n");
+        fflush(stdout);
         local_ordinal_type numRows = A_local_->getLocalNumRows();
         Array<size_t> entriesPerRow(numRows);
         for(local_ordinal_type i = 0; i < numRows; i++) {
@@ -997,6 +1012,8 @@ void RILUK<MatrixType>::compute ()
 #else
       std::cout << "RILUK: insertLocalValues" << std::endl;
       if (A_local_crs_.is_null ()) {
+        printf("JHU: OLD code, A_local_crs_.is_null\n");
+        fflush(stdout);
         Teuchos::Time timer2("RILUK::compute::copyIntoLocalCrs");
         Teuchos::TimeMonitor timeMon2(timer2);
         local_ordinal_type numRows = A_local_->getLocalNumRows();
@@ -1019,10 +1036,26 @@ void RILUK<MatrixType>::compute ()
         A_local_crs_ = rcp_const_cast<const crs_matrix_type> (A_local_crs_nc);
       }
 #endif
-      auto lclMtx = A_local_crs_->getLocalMatrixDevice();
-      A_local_rowmap_  = lclMtx.graph.row_map;
-      A_local_entries_ = lclMtx.graph.entries;
-      A_local_values_  = lclMtx.values;
+
+  printf("JHU: A_local_crs_->getLocalMatrixDevice [before]: getLocalIndicesHost, numCompute_=%d\n",numCompute_);
+  fflush(stdout);
+  A_local_crs_->getLocalIndicesHost(); //for debugging only
+  printf("JHU:  A_local_crs_->getLocalMatrixDevic [before]: getLocalIndicesDevice, numCompute_=%d\n",numCompute_);
+  A_local_crs_->getLocalIndicesDevice(); //for debugging only
+  fflush(stdout);
+      //auto lclMtx = A_local_crs_->getLocalMatrixDevice();
+      //A_local_rowmap_  = lclMtx.graph.row_map;
+      //A_local_entries_ = lclMtx.graph.entries;
+      //A_local_values_  = lclMtx.values;
+
+  /*
+  printf("JHU: A_local_crs_->getLocalMatrixDevice [after]: getLocalIndicesHost, numCompute_=%d\n",numCompute_);
+  fflush(stdout);
+  A_local_crs_->getLocalIndicesHost(); //for debugging only
+  printf("JHU:  A_local_crs_->getLocalMatrixDevic [after]: getLocalIndicesDevice, numCompute_=%d\n",numCompute_);
+  A_local_crs_->getLocalIndicesDevice(); //for debugging only
+  fflush(stdout);
+  */
     }
 
     L_->resumeFill ();
@@ -1051,11 +1084,32 @@ void RILUK<MatrixType>::compute ()
       {
       Teuchos::Time timer2("RILUK::compute::spiluk_numeric");
       Teuchos::TimeMonitor timeMon2(timer2);
+
+  /*
+  printf("JHU: spiluk_numeric [before]: getLocalIndicesHost, numCompute_=%d\n",numCompute_);
+  fflush(stdout);
+  A_local_crs_->getLocalIndicesHost(); //for debugging only
+  printf("JHU: spiluk_numeric [before]: getLocalIndicesDevice, numCompute_=%d\n",numCompute_);
+  A_local_crs_->getLocalIndicesDevice(); //for debugging only
+  fflush(stdout);
+  */
+      auto lclMtx = A_local_crs_->getLocalMatrixDevice();
+      auto A_local_rowmap_  = lclMtx.graph.row_map;
+      auto A_local_entries_ = lclMtx.graph.entries;
+      auto A_local_values_  = lclMtx.values;
+
       KokkosSparse::Experimental::spiluk_numeric( KernelHandle_.getRawPtr(), LevelOfFill_, 
                                                   A_local_rowmap_, A_local_entries_, A_local_values_, 
                                                   L_rowmap, L_entries, L_values, U_rowmap, U_entries, U_values );
       }
     }
+
+  printf("JHU: spiluk_numeric [after]: getLocalIndicesHost, numCompute_=%d\n",numCompute_);
+  fflush(stdout);
+  A_local_crs_->getLocalIndicesHost(); //for debugging only
+  printf("JHU: spiluk_numeric [after]: getLocalIndicesDevice, numCompute_=%d\n",numCompute_);
+  A_local_crs_->getLocalIndicesDevice(); //for debugging only
+  fflush(stdout);
     
     {
     Teuchos::Time timer2("RILUK::compute::fillCompleteLandU");
@@ -1073,6 +1127,13 @@ void RILUK<MatrixType>::compute ()
     U_solver_->compute ();
     }
   }
+
+  printf("JHU: RILUK::compute() [exit]: getLocalIndicesHost\n");
+  fflush(stdout);
+  A_local_crs_->getLocalIndicesHost(); //for debugging only
+  printf("JHU: RILUK::compute() [exit]: getLocalIndicesDevice\n");
+  A_local_crs_->getLocalIndicesDevice(); //for debugging only
+  fflush(stdout);
 
   isComputed_ = true;
   ++numCompute_;
