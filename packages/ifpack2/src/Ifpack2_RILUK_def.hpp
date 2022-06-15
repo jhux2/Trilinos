@@ -573,9 +573,10 @@ void RILUK<MatrixType>::initialize ()
     checkOrderingConsistency (*A_local_);
     L_solver_->setMatrix (L_);
     L_solver_->initialize ();
+    L_solver_->compute ();//NOTE: It makes sense to do compute here because only the nonzero pattern is involved in trisolve compute
     U_solver_->setMatrix (U_);
     U_solver_->initialize ();
-    }
+    U_solver_->compute ();//NOTE: It makes sense to do compute here because only the nonzero pattern is involved in trisolve compute
 
     // Do not call initAllValues. compute() always calls initAllValues to
     // fill L and U with possibly new numbers. initialize() is concerned
@@ -957,10 +958,9 @@ void RILUK<MatrixType>::compute ()
     Teuchos::Time timer2("RILUK::compute::setMatricesAndCompute");
     Teuchos::TimeMonitor timeMon2(timer2);
     L_solver_->setMatrix (L_);
-    L_solver_->compute ();
+    L_solver_->compute ();//NOTE: Only do compute if the pointer changed. Otherwise, do nothing
     U_solver_->setMatrix (U_);
-    U_solver_->compute ();
-    }
+    U_solver_->compute ();//NOTE: Only do compute if the pointer changed. Otherwise, do nothing
   }
   else {
     //KokkosKernels SPILUK
@@ -1128,10 +1128,9 @@ void RILUK<MatrixType>::compute ()
     Teuchos::Time timer2("RILUK::compute::setMatricesAndCompute");
     Teuchos::TimeMonitor timeMon2(timer2);
     L_solver_->setMatrix (L_);
-    L_solver_->compute ();
+    L_solver_->compute ();//NOTE: Only do compute if the pointer changed. Otherwise, do nothing
     U_solver_->setMatrix (U_);
-    U_solver_->compute ();
-    }
+    U_solver_->compute ();//NOTE: Only do compute if the pointer changed. Otherwise, do nothing
   }
 
 #ifdef JHU_DEBUG  
