@@ -95,8 +95,12 @@ OverlappingRowMatrix (const Teuchos::RCP<const row_matrix_type>& A,
   RCP<const map_type>  RowMap, ColMap;
   ExtHaloStarts_.resize(OverlapLevel_+1);
 
+  // TODO If OverlapLevel_ == 1, ExtElements should be exactly the nonlocal GIDs in the
+  // TODO original matrix's column map. There's no need to mess with std::find, etc.
+
   // The big import loop
   for (int overlap = 0 ; overlap < OverlapLevel_ ; ++overlap) {
+    //record index of start of current halo level-set
     ExtHaloStarts_[overlap] = (size_t) ExtElements.size();
 
     // Get the current maps
@@ -114,6 +118,7 @@ OverlappingRowMatrix (const Teuchos::RCP<const row_matrix_type>& A,
     size_t count = 0;
 
     // define the set of rows that are in ColMap but not in RowMap
+    // TODO: potential optimization: Don't start loop at zero, start instead from first ghost ID (thanks to BK for noticing this)
     for (local_ordinal_type i = 0 ; (size_t) i < ColMap->getLocalNumElements() ; ++i) {
       const global_ordinal_type GID = ColMap->getGlobalElement (i);
       if (A_->getRowMap ()->getLocalElement (GID) == global_invalid) {
@@ -128,31 +133,29 @@ OverlappingRowMatrix (const Teuchos::RCP<const row_matrix_type>& A,
       }
     }
 
-    // mfh 24 Nov 2013: We don't need TmpMap, TmpGraph, or
-    // TmpImporter after this loop, so we don't have to construct them
-    // on the last round.
+    //mylist now contains GIDs that are in the current column map but not in the row map.
+
+    // On last import round, TmpMap, TmpGraph, and TmpImporter are unneeded,
+    // so don't build them.
     if (overlap + 1 < OverlapLevel_) {
-      // Allocate & import new matrices, maps, etc.
-      //
-      // FIXME (mfh 24 Nov 2013) Do we always want to use index base
-      // zero?  It doesn't really matter, since the actual index base
-      // (in the current implementation of Map) will always be the
-      // globally least GID.
+      //map consisting of GIDs that are in the current halo level-set
       TmpMap = rcp (new map_type (global_invalid, mylist (0, count),
                                   Teuchos::OrdinalTraits<global_ordinal_type>::zero (),
                                   A_->getComm ()));
+      //graph whose rows are the current halo level-set to import
       TmpGraph = rcp (new crs_graph_type (TmpMap, 0));
       TmpImporter = rcp (new import_type (A_->getRowMap (), TmpMap));
 
+      //import from original matrix graph to current halo level-set graph
       TmpGraph->doImport (*A_crsGraph, *TmpImporter, Tpetra::INSERT);
       TmpGraph->fillComplete (A_->getDomainMap (), TmpMap);
     }
   } // end overlap loop
+
+  //record index of start of last halo level-set
   ExtHaloStarts_[OverlapLevel_] = (size_t) ExtElements.size();
 
-
-  // build the map containing all the nodes (original
-  // matrix + extended matrix)
+  // build the map containing all the nodes (original matrix + extended matrix)
   Array<global_ordinal_type> mylist (numMyRowsA + ExtElements.size ());
   for (local_ordinal_type i = 0; (size_t)i < numMyRowsA; ++i) {
     mylist[i] = A_->getRowMap ()->getGlobalElement (i);
