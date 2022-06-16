@@ -65,6 +65,7 @@
 
 #include <Ifpack2_UnitTestHelpers.hpp>
 #include <Ifpack2_RILUK.hpp>
+#include <Ifpack2_AdditiveSchwarz.hpp>
 
 // Xpetra / Galeri
 #ifdef HAVE_IFPACK2_XPETRA
@@ -168,7 +169,9 @@ static Teuchos::RCP<Ifpack2::RILUK<Tpetra::RowMatrix<Scalar,LocalOrdinal,GlobalO
   //GlobalOrdinal nx = 273, ny=273, nz=1; //30k rows
   //Galeri::Xpetra::Parameters<GlobalOrdinal> GaleriParameters (clp, nx, ny, nz, "Laplace2D");
   //GlobalOrdinal nx = 42, ny=42, nz=42; //75k rows
-  GlobalOrdinal nx = 46, ny=46, nz=46; //100k rows
+  //GlobalOrdinal nx = 46, ny=46, nz=46; //100k rows
+  //GlobalOrdinal nx = 79, ny=79, nz=79; //500k rows
+  GlobalOrdinal nx = 100, ny=100, nz=100; //1m rows
   //GlobalOrdinal nx = 5, ny=5, nz=5;
   Galeri::Xpetra::Parameters<GlobalOrdinal> GaleriParameters (clp, nx, ny, nz, "Laplace3D");
   Xpetra::Parameters xpetraParameters (clp);
@@ -197,6 +200,67 @@ static Teuchos::RCP<Ifpack2::RILUK<Tpetra::RowMatrix<Scalar,LocalOrdinal,GlobalO
   params.set("fact: iluk level-of-overlap", 0);
   if (ilukimplType == IlukImplTypeDetails::KSPILUK)
     params.set("fact: type", "KSPILUK");
+  prec->setParameters(params);
+  return prec;
+}
+
+template <typename Scalar, typename LocalOrdinal, typename GlobalOrdinal>
+static Teuchos::RCP<Ifpack2::AdditiveSchwarz<Tpetra::RowMatrix<Scalar,LocalOrdinal,GlobalOrdinal,Node> > > setupTest3(const IlukImplTypeDetails::Enum ilukimplType)
+{
+  typedef Tpetra::CrsMatrix<Scalar,LocalOrdinal,GlobalOrdinal,Node>   crs_matrix_type;
+  typedef Tpetra::RowMatrix<Scalar,LocalOrdinal,GlobalOrdinal,Node>   row_matrix_type;
+  typedef Tpetra::Map<LocalOrdinal,GlobalOrdinal,Node>                map_type;
+
+  using Teuchos::RCP;
+  using Teuchos::rcp;
+
+  RCP<const Teuchos::Comm<int> > comm = Tpetra::getDefaultComm();
+
+  ////////////////////////////////////////
+  typedef Tpetra::CrsMatrix<Scalar,LocalOrdinal,GlobalOrdinal,Node>   crs_matrix_type;
+  // Generate the matrix using Galeri.  Galeri wraps it in an Xpetra
+  // matrix, so after it finishes, ask it for the Tpetra matrix.
+  Teuchos::CommandLineProcessor clp;
+  //GlobalOrdinal nx = 173, ny=173, nz=1; //30k rows
+  //GlobalOrdinal nx = 273, ny=273, nz=1; //30k rows
+  //Galeri::Xpetra::Parameters<GlobalOrdinal> GaleriParameters (clp, nx, ny, nz, "Laplace2D");
+  //GlobalOrdinal nx = 42, ny=42, nz=42; //75k rows
+  //GlobalOrdinal nx = 46, ny=46, nz=46; //100k rows
+  //GlobalOrdinal nx = 79, ny=79, nz=79; //500k rows
+  GlobalOrdinal nx = 100, ny=100, nz=100; //1m rows
+  //GlobalOrdinal nx = 5, ny=5, nz=5;
+  Galeri::Xpetra::Parameters<GlobalOrdinal> GaleriParameters (clp, nx, ny, nz, "Laplace3D");
+  Xpetra::Parameters xpetraParameters (clp);
+  Teuchos::ParameterList GaleriList = GaleriParameters.GetParameterList ();
+
+  typedef Xpetra::Map<LocalOrdinal,GlobalOrdinal,Node>                XMapType;
+  RCP<XMapType> xmap =
+    Galeri::Xpetra::CreateMap<LocalOrdinal, GlobalOrdinal, Node> (xpetraParameters.GetLib (),
+                                             "Cartesian3D", comm, GaleriList);
+  typedef Xpetra::TpetraCrsMatrix<Scalar,LocalOrdinal,GlobalOrdinal,Node> XCrsType;
+  typedef Xpetra::MultiVector<Scalar,LocalOrdinal,GlobalOrdinal,Node>     XMVectorType;
+  RCP<Galeri::Xpetra::Problem<XMapType,XCrsType,XMVectorType> > Pr =
+    Galeri::Xpetra::BuildProblem<Scalar,LocalOrdinal,GlobalOrdinal,XMapType,XCrsType,XMVectorType> (std::string("Laplace3D"),
+                                                                           xmap, GaleriList);
+
+  RCP<XCrsType> XA = Pr->BuildMatrix ();
+  RCP<Tpetra::CrsMatrix<Scalar,LocalOrdinal,GlobalOrdinal,Node>> A = XA->getTpetra_CrsMatrixNonConst();
+  //TEST_INEQUALITY(A, Teuchos::null);
+  ////////////////////////////////////////
+  RCP<const crs_matrix_type> constA = A;
+  auto prec = rcp(new Ifpack2::AdditiveSchwarz<row_matrix_type>(constA));
+
+  Teuchos::ParameterList params;
+  params.set ("inner preconditioner name", "RILUK");
+  Teuchos::ParameterList innerParams;
+  GlobalOrdinal lof=1;
+  GlobalOrdinal loo=1;
+  innerParams.set ("fact: iluk level-of-fill", lof);
+  innerParams.set ("fact: drop tolerance", 0.0);
+  innerParams.set("fact: iluk level-of-overlap", loo);
+  if (ilukimplType == IlukImplTypeDetails::KSPILUK)
+    innerParams.set("fact: type", "KSPILUK");
+  params.set ("inner preconditioner parameters", innerParams);
   prec->setParameters(params);
   return prec;
 }
@@ -280,9 +344,73 @@ TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL(Ifpack2RILUK, ParallelReuse, Scalar, LocalOrdi
   }
 }
 
+TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL(Ifpack2RILUK, AdditiveSchwarzSubdomainSolve, Scalar, LocalOrdinal, GlobalOrdinal)
+{
+  Teuchos::RCP<const Teuchos::Comm<int> > comm = Tpetra::getDefaultComm ();
+#if 0
+  {
+    out << "IlukImplTypeDetails::Serial" << std::endl;
+    Teuchos::RCP<Teuchos::StackedTimer> stacked_timer;
+    stacked_timer = Teuchos::rcp(new Teuchos::StackedTimer("Ifpack2RILUK::AdditiveSchwarzSubdomainSolve (SERIAL)"));
+    Teuchos::TimeMonitor::setStackedTimer(stacked_timer);
+    auto prec = setupTest3<Scalar, LocalOrdinal, GlobalOrdinal>(IlukImplTypeDetails::Serial);
+    prec->initialize();
+    {
+    Teuchos::Time timer("AS::compute() 0");
+    Teuchos::TimeMonitor timeMon(timer);
+    prec->compute();
+    }
+    // Pretend we've updated some of the numbers in the matrix, but not its structure.
+    {
+    Teuchos::Time timer("AS::compute() 1");
+    Teuchos::TimeMonitor timeMon(timer);
+    prec->compute();
+    }
+    {
+    Teuchos::Time timer("AS::compute() 2");
+    Teuchos::TimeMonitor timeMon(timer);
+    prec->compute();
+    }
+    stacked_timer->stopBaseTimer();
+    Teuchos::StackedTimer::OutputOptions options;
+    options.output_fraction = options.output_histogram = options.output_minmax = true;
+    stacked_timer->report(out, comm, options);
+  }
+#endif
+  {
+    out << "IlukImplTypeDetails::KSPILUK" << std::endl;
+    Teuchos::RCP<Teuchos::StackedTimer> stacked_timer;
+    stacked_timer = Teuchos::rcp(new Teuchos::StackedTimer("Ifpack2RILUK::AdditiveSchwarzSubdomainSolve (KSPILUK)"));
+    Teuchos::TimeMonitor::setStackedTimer(stacked_timer);
+    auto prec = setupTest3<Scalar, LocalOrdinal, GlobalOrdinal>(IlukImplTypeDetails::KSPILUK);
+    prec->initialize();
+    {
+    Teuchos::Time timer("AS::compute() 0");
+    Teuchos::TimeMonitor timeMon(timer);
+    prec->compute();
+    }
+    // Pretend we've updated some of the numbers in the matrix, but not its structure.
+    {
+    Teuchos::Time timer("AS::compute() 1");
+    Teuchos::TimeMonitor timeMon(timer);
+    prec->compute();
+    }
+    {
+    Teuchos::Time timer("AS::compute() 2");
+    Teuchos::TimeMonitor timeMon(timer);
+    prec->compute();
+    }
+    stacked_timer->stopBaseTimer();
+    Teuchos::StackedTimer::OutputOptions options;
+    options.output_fraction = options.output_histogram = options.output_minmax = true;
+    stacked_timer->report(out, comm, options);
+  }
+}
+
 #define UNIT_TEST_GROUP_SC_LO_GO( SC, LO, GO ) \
   TEUCHOS_UNIT_TEST_TEMPLATE_3_INSTANT( Ifpack2RILUK, Parallel, SC, LO, GO ) \
-  TEUCHOS_UNIT_TEST_TEMPLATE_3_INSTANT( Ifpack2RILUK, ParallelReuse, SC, LO, GO )
+  TEUCHOS_UNIT_TEST_TEMPLATE_3_INSTANT( Ifpack2RILUK, ParallelReuse, SC, LO, GO ) \
+  TEUCHOS_UNIT_TEST_TEMPLATE_3_INSTANT( Ifpack2RILUK, AdditiveSchwarzSubdomainSolve, SC, LO, GO )
 
 #include "Ifpack2_ETIHelperMacros.h"
 

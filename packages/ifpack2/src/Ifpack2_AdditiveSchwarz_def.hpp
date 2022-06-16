@@ -1314,12 +1314,16 @@ void AdditiveSchwarz<MatrixType,LocalInverseType>::setup ()
   RCP<row_matrix_type> ActiveMatrix;
 
   // Create localized matrix.
+  {
+  Teuchos::Time timer3("AdditiveSchwarz::setup::local_filter_ctor");
+  Teuchos::TimeMonitor timeMon_copy3(timer3);
   if (! OverlappingMatrix_.is_null ()) {
     LocalizedMatrix = rcp (new LocalFilter<row_matrix_type> (OverlappingMatrix_));
   }
   else {
     LocalizedMatrix = rcp (new LocalFilter<row_matrix_type> (Matrix_));
   }
+  } //timer scope
 
   // Sanity check; I don't trust the logic above to have created LocalizedMatrix.
   TEUCHOS_TEST_FOR_EXCEPTION(
@@ -1332,14 +1336,21 @@ void AdditiveSchwarz<MatrixType,LocalInverseType>::setup ()
   ActiveMatrix = LocalizedMatrix;
 
   // Singleton Filtering
+  {
+  Teuchos::Time timer3("AdditiveSchwarz::setup::singlton_filter_ctor");
+  Teuchos::TimeMonitor timeMon_copy3(timer3);
   if (FilterSingletons_) {
     SingletonMatrix_ = rcp (new SingletonFilter<row_matrix_type> (LocalizedMatrix));
     ActiveMatrix = SingletonMatrix_;
   }
+  } //timer scope
 
   // Do reordering
   if (UseReordering_) {
 #if defined(HAVE_IFPACK2_XPETRA) && defined(HAVE_IFPACK2_ZOLTAN2)
+    {
+    Teuchos::Time timer3("AdditiveSchwarz::setup::reordering");
+    Teuchos::TimeMonitor timeMon_copy3(timer3);
     // Unlike Ifpack, Zoltan2 does all the dirty work here.
     typedef ReorderFilter<row_matrix_type> reorder_filter_type;
     Teuchos::ParameterList zlist = List_.sublist ("schwarz: reordering list");
@@ -1399,6 +1410,7 @@ void AdditiveSchwarz<MatrixType,LocalInverseType>::setup ()
 
 
     ActiveMatrix = ReorderedLocalizedMatrix_;
+    } //timer scope
 #else
     // This is a logic_error, not a runtime_error, because
     // setParameters() should have excluded this case already.
@@ -1418,6 +1430,9 @@ void AdditiveSchwarz<MatrixType,LocalInverseType>::setup ()
 
   // Construct the inner solver if necessary.
   if (Inverse_.is_null ()) {
+    { 
+    Teuchos::Time timer3("AdditiveSchwarz::setup::construct_inner_solver");
+    Teuchos::TimeMonitor timeMon_copy3(timer3);
     const std::string innerName = innerPrecName ();
     TEUCHOS_TEST_FOR_EXCEPTION(
       innerName == "INVALID", std::logic_error,
@@ -1459,6 +1474,7 @@ void AdditiveSchwarz<MatrixType,LocalInverseType>::setup ()
       innerPrec->setParameters (rcp (new ParameterList (result.first)));
     }
     Inverse_ = innerPrec; // "Commit" the inner solver.
+    } //timer scope
   }
   else if (Inverse_->getMatrix ().getRawPtr () != innerMatrix_.getRawPtr ()) {
     // The new inner matrix is different from the inner

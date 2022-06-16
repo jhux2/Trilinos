@@ -52,7 +52,7 @@
 #include "Ifpack2_ILUT.hpp"
 #include "Ifpack2_Relaxation.hpp"
 #include "Ifpack2_RILUK.hpp"
-#include "Ifpack2_Experimental_RBILUK.hpp"
+//#include "Ifpack2_Experimental_RBILUK.hpp"
 #include "Ifpack2_BlockRelaxation.hpp"
 #include "Ifpack2_BandedContainer.hpp"
 #include "Ifpack2_DenseContainer.hpp"
@@ -122,9 +122,9 @@ OneLevelFactory<MatrixType>::create (const std::string& precType,
   else if (precTypeUpper == "RILUK") {
     prec = rcp (new RILUK<row_matrix_type> (matrix));
   }
-  else if (precTypeUpper == "RBILUK") {
-    prec = rcp (new Experimental::RBILUK<row_matrix_type>(matrix));
-  }
+//  else if (precTypeUpper == "RBILUK") {
+//    prec = rcp (new Experimental::RBILUK<row_matrix_type>(matrix));
+//  }
   else if (precTypeUpper == "FAST_IC" || precTypeUpper == "FAST_ILU" || precTypeUpper == "FAST_ILDL") {
     #ifdef HAVE_IFPACK2_SHYLU_NODEFASTILU
     {
@@ -245,7 +245,7 @@ OneLevelFactory<MatrixType>::isSupported (const std::string& precType) const
 #ifdef HAVE_IFPACK2_AMESOS2
     "AMESOS2",
 #endif
-    "DIAGONAL", "ILUT", "RELAXATION", "RILUK", "RBILUK",
+    "DIAGONAL", "ILUT", "RELAXATION", "RILUK", /*"RBILUK",*/
 #ifdef HAVE_IFPACK2_SHYLU_NODEFASTILU
     "FAST_IC", "FAST_ILU", "FAST_ILDL",
 #endif

@@ -129,7 +129,9 @@ template<class MatrixType>
 void RILUK<MatrixType>::allocateSolvers ()
 {
   L_solver_ = Teuchos::rcp (new LocalSparseTriangularSolver<row_matrix_type> ());
+  L_solver_->setObjectLabel("lower");
   U_solver_ = Teuchos::rcp (new LocalSparseTriangularSolver<row_matrix_type> ());
+  U_solver_->setObjectLabel("upper");
 }
 
 template<class MatrixType>
@@ -577,6 +579,7 @@ void RILUK<MatrixType>::initialize ()
     U_solver_->setMatrix (U_);
     U_solver_->initialize ();
     U_solver_->compute ();//NOTE: It makes sense to do compute here because only the nonzero pattern is involved in trisolve compute
+    }
 
     // Do not call initAllValues. compute() always calls initAllValues to
     // fill L and U with possibly new numbers. initialize() is concerned
@@ -961,6 +964,7 @@ void RILUK<MatrixType>::compute ()
     L_solver_->compute ();//NOTE: Only do compute if the pointer changed. Otherwise, do nothing
     U_solver_->setMatrix (U_);
     U_solver_->compute ();//NOTE: Only do compute if the pointer changed. Otherwise, do nothing
+    }
   }
   else {
     //KokkosKernels SPILUK
@@ -985,7 +989,7 @@ void RILUK<MatrixType>::compute ()
       //if (A_local_crs_.is_null ()) {
       //FIXME check whether A_local_crs_nc is brand new (never had any entries added)
       if (numCompute_ > 0) {
-        Teuchos::Time timer2("RILUK::compute::copyIntoLocalCrs");
+        Teuchos::Time timer2("RILUK::compute::sumIntoLocalCrs");
         Teuchos::TimeMonitor timeMon2(timer2);
         local_ordinal_type numRows = A_local_->getLocalNumRows();
         /*
@@ -999,22 +1003,48 @@ void RILUK<MatrixType>::compute ()
         //                            A_local_->getColMap (),
         //                            entriesPerRow()));
         // copy entries into A_local_crs_
+        {
+        Teuchos::Time timer3("RILUK::compute::resumeFill");
+        Teuchos::TimeMonitor timeMon3(timer3);
         A_local_crs_nc->resumeFill(); //Can't resumeFill on a non-owned graph
+        }
+        {
+        Teuchos::Time timer3("RILUK::compute::setAllToScalar");
+        Teuchos::TimeMonitor timeMon3(timer3);
         A_local_crs_nc->setAllToScalar(STS::zero());
+        }
         nonconst_local_inds_host_view_type indices("indices",A_local_->getLocalMaxNumRowEntries());
         nonconst_values_host_view_type values("values",A_local_->getLocalMaxNumRowEntries());
+        {
+        Teuchos::Time timer3("RILUK::compute::sumIntoLocalValues loop");
+        Teuchos::TimeMonitor timeMon3(timer3);
         for(local_ordinal_type i = 0; i < numRows; i++) {
           size_t numEntries = 0;
+          //{
+          //Teuchos::Time timer4("RILUK::compute::getLocalRowCopy");
+          //Teuchos::TimeMonitor timeMon4(timer4);
           A_local_->getLocalRowCopy(i, indices, values, numEntries);
+          //}
           //A_local_crs_nc->insertLocalValues(i, numEntries, reinterpret_cast<scalar_type*>(values.data()),indices.data());
+          //{
+          //Teuchos::Time timer4("RILUK::compute::sumIntoLocalValues");
+          //Teuchos::TimeMonitor timeMon4(timer4);
           A_local_crs_nc->sumIntoLocalValues(i, numEntries, reinterpret_cast<scalar_type*>(values.data()),indices.data());
+          //}
         }
+        }
+        {
+        Teuchos::Time timer3("RILUK::compute::fillComplete");
+        Teuchos::TimeMonitor timeMon3(timer3);
         A_local_crs_nc->fillComplete (A_local_->getDomainMap (), A_local_->getRangeMap ());
+        }
         A_local_crs_ = rcp_const_cast<const crs_matrix_type> (A_local_crs_nc);
       }
 #else
       std::cout << "RILUK: insertLocalValues" << std::endl;
-      if (A_local_crs_.is_null ()) {
+      //if (A_local_crs_.is_null ()) {
+      //FIXME check whether A_local_crs_nc is brand new (never had any entries added)
+      if (numCompute_ > 0) {
         //printf("JHU: OLD code, A_local_crs_.is_null\n"); fflush(stdout);
         Teuchos::Time timer2("RILUK::compute::copyIntoLocalCrs");
         Teuchos::TimeMonitor timeMon2(timer2);
@@ -1023,21 +1053,43 @@ void RILUK<MatrixType>::compute ()
         for(local_ordinal_type i = 0; i < numRows; i++) {
           entriesPerRow[i] = A_local_->getNumEntriesInLocalRow(i);
         }
-        RCP<crs_matrix_type> A_local_crs_nc = rcp (new crs_matrix_type (A_local_->getRowMap (),
+        RCP<crs_matrix_type> A_local_crs_nc; //JHU moved decl out of timer scope
+        {
+        Teuchos::Time timer3("RILUK::compute::new crs_matrix_type");
+        Teuchos::TimeMonitor timeMon3(timer3);
+        //RCP<crs_matrix_type> A_local_crs_nc = rcp (new crs_matrix_type (A_local_->getRowMap (),
+        A_local_crs_nc = rcp (new crs_matrix_type (A_local_->getRowMap (),
                                     A_local_->getColMap (),
                                     entriesPerRow()));
+        }
         // copy entries into A_local_crs_
         nonconst_local_inds_host_view_type indices("indices",A_local_->getLocalMaxNumRowEntries());
         nonconst_values_host_view_type values("values",A_local_->getLocalMaxNumRowEntries());
+        {
+        Teuchos::Time timer3("RILUK::compute::insertLocalValues loop");
+        Teuchos::TimeMonitor timeMon3(timer3);
         for(local_ordinal_type i = 0; i < numRows; i++) {
           size_t numEntries = 0;
+          //{
+          //Teuchos::Time timer4("RILUK::compute::getLocalRowCopy");
+          //Teuchos::TimeMonitor timeMon4(timer4);
           A_local_->getLocalRowCopy(i, indices, values, numEntries);
+          //}
+          //{
+          //Teuchos::Time timer4("RILUK::compute::insertLocalValues");
+          //Teuchos::TimeMonitor timeMon4(timer4);
           A_local_crs_nc->insertLocalValues(i, numEntries, reinterpret_cast<scalar_type*>(values.data()),indices.data());
+          //}
         }
+        }
+        {
+        Teuchos::Time timer3("RILUK::compute::fillComplete");
+        Teuchos::TimeMonitor timeMon3(timer3);
         A_local_crs_nc->fillComplete (A_local_->getDomainMap (), A_local_->getRangeMap ());
+        }
         A_local_crs_ = rcp_const_cast<const crs_matrix_type> (A_local_crs_nc);
       }
-#endif
+#endif //ifdef RILUK_SUM_INTO
 
 #ifdef JHU_DEBUG  
   printf("JHU: A_local_crs_->getLocalMatrixDevice [before]: getLocalIndicesHost, numCompute_=%d\n",numCompute_);
@@ -1131,6 +1183,7 @@ void RILUK<MatrixType>::compute ()
     L_solver_->compute ();//NOTE: Only do compute if the pointer changed. Otherwise, do nothing
     U_solver_->setMatrix (U_);
     U_solver_->compute ();//NOTE: Only do compute if the pointer changed. Otherwise, do nothing
+    }
   }
 
 #ifdef JHU_DEBUG  

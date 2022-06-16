@@ -587,17 +587,24 @@ void IlukGraph<GraphType, KKHandleType>::initialize(const Teuchos::RCP<KKHandleT
   const int NumMyRows = OverlapGraph_->getRowMap()->getLocalNumElements();
   auto localOverlapGraph = OverlapGraph_->getLocalGraphDevice();
 
+  {
+  Teuchos::Time timer3("IlukGraph::initialize::spiluk_reset_handle");
+  Teuchos::TimeMonitor timeMon_copy3(timer3);
   if (KernelHandle->get_spiluk_handle()->get_nrows() < static_cast<size_type>(NumMyRows)) {
     KernelHandle->get_spiluk_handle()->reset_handle(NumMyRows,
                                                     KernelHandle->get_spiluk_handle()->get_nnzL(),
                                                     KernelHandle->get_spiluk_handle()->get_nnzU());
   }
+  } //timer scope
 
   lno_row_view_t     L_row_map("L_row_map", NumMyRows + 1);
   lno_nonzero_view_t L_entries("L_entries", KernelHandle->get_spiluk_handle()->get_nnzL());
   lno_row_view_t     U_row_map("U_row_map", NumMyRows + 1);
   lno_nonzero_view_t U_entries("U_entries", KernelHandle->get_spiluk_handle()->get_nnzU());
 
+  {
+  Teuchos::Time timer3("IlukGraph::initialize::spiluk_symbolic");
+  Teuchos::TimeMonitor timeMon_copy3(timer3);
   bool symbolicError;
   do {
     symbolicError = false;
@@ -620,6 +627,7 @@ void IlukGraph<GraphType, KKHandleType>::initialize(const Teuchos::RCP<KKHandleT
                    &localSymbolicError, &globalSymbolicError);
     symbolicError = globalSymbolicError > 0;
   } while (symbolicError);
+  } //timer scope
 
   Kokkos::resize(L_entries, KernelHandle->get_spiluk_handle()->get_nnzL());
   Kokkos::resize(U_entries, KernelHandle->get_spiluk_handle()->get_nnzU());
@@ -638,8 +646,12 @@ void IlukGraph<GraphType, KKHandleType>::initialize(const Teuchos::RCP<KKHandleT
   RCP<const map_type> L_RangeMap  = Graph_->getRangeMap ();
   RCP<const map_type> U_DomainMap = Graph_->getDomainMap ();
   RCP<const map_type> U_RangeMap  = OverlapGraph_->getRowMap ();
+  {
+  Teuchos::Time timer3("IlukGraph::initialize::LandUGraphFillComplete");
+  Teuchos::TimeMonitor timeMon_copy3(timer3);
   L_Graph_->fillComplete (L_DomainMap, L_RangeMap, params);
   U_Graph_->fillComplete (U_DomainMap, U_RangeMap, params);
+  } //timer scope
 }
 
 } // namespace Ifpack2

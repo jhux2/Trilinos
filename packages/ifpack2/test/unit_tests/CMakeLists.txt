@@ -49,8 +49,10 @@ Ifpack2_UnitTestFiltering.cpp
 Ifpack2_UnitTestHeap.cpp
 Ifpack2_UnitTestIlukGraph.cpp
 Ifpack2_UnitTestILUT.cpp
+#Ifpack2_UnitTestLocalFilter_kokkos.cpp
 Ifpack2_UnitTestOverlapGraph.cpp
 Ifpack2_UnitTestOverlappingRowMatrix.cpp
+#Ifpack2_UnitTestOverlappingRowMatrix_kokkos.cpp
 Ifpack2_UnitTestParameters.cpp
 Ifpack2_UnitTestPartitioning.cpp
 Ifpack2_UnitTestRelaxation.cpp
@@ -82,15 +84,15 @@ TRIBITS_ADD_EXECUTABLE_AND_TEST(
     COMM serial mpi
   )
 
-TRIBITS_ADD_EXECUTABLE_AND_TEST(
-		RBILUK
-		SOURCES
-		Ifpack2_UnitTestRBILUK.cpp
-		${TEUCHOS_STD_UNIT_TEST_MAIN}
-		ARGS ""
-		COMM serial mpi
-		STANDARD_PASS_OUTPUT
-		)
+#TRIBITS_ADD_EXECUTABLE_AND_TEST(
+#		RBILUK
+#		SOURCES
+#		Ifpack2_UnitTestRBILUK.cpp
+#		${TEUCHOS_STD_UNIT_TEST_MAIN}
+#		ARGS ""
+#		COMM serial mpi
+#		STANDARD_PASS_OUTPUT
+#		)
 
 #TRIBITS_ADD_EXECUTABLE(
 #    Distributed_SGS

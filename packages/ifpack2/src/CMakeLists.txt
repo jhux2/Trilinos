@@ -238,8 +238,10 @@ IF(Ifpack2_ENABLE_EXPLICIT_INSTANTIATION)
     ILUT
     LinePartitioner
     LocalFilter
+    #LocalFilter_kokkos
     LocalSparseTriangularSolver
     OverlappingRowMatrix
+    #OverlappingRowMatrix_kokkos
     Relaxation
     ReorderFilter
     RILUK
@@ -257,7 +259,7 @@ IF(Ifpack2_ENABLE_EXPLICIT_INSTANTIATION)
     Details::OneLevelFactory
     Details::ScaledDampedResidual
     Details::TriDiSolver
-    Experimental::RBILUK
+    #Experimental::RBILUK
     )
   IF(Ifpack2_ENABLE_Amesos2)
     APPEND_GLOBAL_SET(IFPACK2_ETI_CLASSES

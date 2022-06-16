@@ -195,6 +195,7 @@ public:
   typedef typename MatrixType::values_host_view_type values_host_view_type;
 
   typedef typename MatrixType::nonconst_global_inds_host_view_type nonconst_global_inds_host_view_type;
+  //typedef typename local_inds_device_view_type::HostMirror nonconst_local_inds_host_view_type;
   typedef typename MatrixType::nonconst_local_inds_host_view_type nonconst_local_inds_host_view_type;
   typedef typename MatrixType::nonconst_values_host_view_type nonconst_values_host_view_type;
 

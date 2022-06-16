@@ -640,10 +640,15 @@ TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL(Ifpack2OverlappingRowMatrix, reducedMatvec, Sc
 }
 
 
+/*
 #define UNIT_TEST_GROUP_SCALAR_ORDINAL( Scalar, LO, GO ) \
   TEUCHOS_UNIT_TEST_TEMPLATE_3_INSTANT( Ifpack2OverlappingRowMatrix, Test0, Scalar, LO, GO ) \
   TEUCHOS_UNIT_TEST_TEMPLATE_3_INSTANT( Ifpack2OverlappingRowMatrix, getLocalDiag, Scalar, LO, GO ) \
   TEUCHOS_UNIT_TEST_TEMPLATE_3_INSTANT( Ifpack2OverlappingRowMatrix, reducedMatvec, Scalar, LO, GO ) 
+*/
+#define UNIT_TEST_GROUP_SCALAR_ORDINAL( Scalar, LO, GO ) \
+  TEUCHOS_UNIT_TEST_TEMPLATE_3_INSTANT( Ifpack2OverlappingRowMatrix, Test0, Scalar, LO, GO ) \
+  TEUCHOS_UNIT_TEST_TEMPLATE_3_INSTANT( Ifpack2OverlappingRowMatrix, getLocalDiag, Scalar, LO, GO )
 
 // mfh 26 Aug 2015: Ifpack2::OverlappingRowMatrix was only getting
 // tested for Scalar = double, LocalOrdinal = int, GlobalOrdinal =
