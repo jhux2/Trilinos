@@ -34,7 +34,7 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
-// Questions? Contact ifpack2-developers@software.sandia.gov
+// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
 //
 // ***********************************************************************
 //@HEADER
@@ -45,9 +45,6 @@
 
 #include <sstream>
 
-#include "Kokkos_Core.hpp"
-#include "std_algorithms/Kokkos_ModifyingSequenceOperations.hpp"
-#include "Kokkos_Sort.hpp"
 #include <Ifpack2_Details_OverlappingRowGraph.hpp>
 #include <Tpetra_CrsMatrix.hpp>
 #include <Tpetra_Import.hpp>
@@ -63,10 +60,9 @@ OverlappingRowMatrix (const Teuchos::RCP<const row_matrix_type>& A,
   A_ (Teuchos::rcp_dynamic_cast<const crs_matrix_type> (A, true)),
   OverlapLevel_ (overlapLevel)
 {
-  //int mypid = A_->getComm()->getRank();
-  //printf("%d: starting OverlappingRowMatrix ctor\n",mypid); fflush(stdout);
   using Teuchos::RCP;
   using Teuchos::rcp;
+  using Teuchos::Array;
   using Teuchos::outArg;
   using Teuchos::REDUCE_SUM;
   using Teuchos::reduceAll;
@@ -86,26 +82,24 @@ OverlappingRowMatrix (const Teuchos::RCP<const row_matrix_type>& A,
     "Ifpack2::OverlappingRowMatrix: Matrix must be "
     "distributed over more than one MPI process.");
 
+
   RCP<const crs_graph_type> A_crsGraph = A_->getCrsGraph ();
   const size_t numMyRowsA = A_->getLocalNumRows ();
   const global_ordinal_type global_invalid =
     Teuchos::OrdinalTraits<global_ordinal_type>::invalid ();
 
-  Kokkos::View<global_ordinal_type*, device_type> ExtElements("all halo rows", 0);
-  typename Kokkos::View<global_ordinal_type*, device_type>::HostMirror ExtElements_h = Kokkos::create_mirror_view(ExtElements);
+  // Temp arrays
+  Array<global_ordinal_type> ExtElements;
   RCP<map_type>        TmpMap;
   RCP<crs_graph_type>  TmpGraph;
   RCP<import_type>     TmpImporter;
   RCP<const map_type>  RowMap, ColMap;
-  size_t globalCount_h = 0; //count of GIDs in all halo level-sets
-  size_t globalNumExtElements = 0;
+  Kokkos::resize(ExtHaloStarts_, OverlapLevel_+1);
+  ExtHaloStarts_h = Kokkos::create_mirror_view(ExtHaloStarts_);
 
-  //printf("%d: starting big import loop\n",mypid); fflush(stdout);
   // The big import loop
   for (int overlap = 0 ; overlap < OverlapLevel_ ; ++overlap) {
-    //printf("%d: starting import loop preliminaries\n",mypid); fflush(stdout);
-    //FIXME
-    //ExtHaloStarts_[overlap] = (size_t) ExtElements.size();
+    ExtHaloStarts_h(overlap) = (size_t) ExtElements.size();
 
     // Get the current maps
     if (overlap == 0) {
@@ -116,48 +110,31 @@ OverlappingRowMatrix (const Teuchos::RCP<const row_matrix_type>& A,
       RowMap = TmpGraph->getRowMap ();
       ColMap = TmpGraph->getColMap ();
     }
-    //printf("%d: finished setting maps\n",mypid); fflush(stdout);
 
     const size_t size = ColMap->getLocalNumElements () - RowMap->getLocalNumElements ();
-    Kokkos::View<global_ordinal_type*, device_type> mylist("current halo GIDs",size);
-    typename Kokkos::View<global_ordinal_type*, device_type>::HostMirror mylist_h = Kokkos::create_mirror_view(mylist);
-    size_t count_h = 0; //count of GIDs in current halo level-set
-    Kokkos::View<size_t,device_type> count("count of GIDS in current halo");
-    //printf("%d: finished allocating mylist\n",mypid); fflush(stdout);
+    Array<global_ordinal_type> mylist (size);
+    size_t count = 0;
 
-    size_t maxNumExtElements = ColMap()->getLocalNumElements() - RowMap()->getLocalNumElements();
-    //must account for element counts from previous import rounds
-    globalNumExtElements += maxNumExtElements;
-    Kokkos::resize(ExtElements,globalNumExtElements);
-    Kokkos::resize(ExtElements_h,globalNumExtElements);
-    //printf("%d: finished resizing ExtElements\n",mypid); fflush(stdout);
-
-    // identify the set of rows that are in ColMap but not in RowMap
-    //printf("%d: populating ExtElements\n",mypid); fflush(stdout);
+    // define the set of rows that are in ColMap but not in RowMap
     for (local_ordinal_type i = 0 ; (size_t) i < ColMap->getLocalNumElements() ; ++i) {
       const global_ordinal_type GID = ColMap->getGlobalElement (i);
       if (A_->getRowMap ()->getLocalElement (GID) == global_invalid) {
-        ExtElements_h(globalCount_h) = GID;
-        globalCount_h++;
-        mylist_h(count_h) = GID;
-        count_h++;
+        typedef typename Array<global_ordinal_type>::iterator iter_type;
+        const iter_type end = ExtElements.end ();
+        const iter_type pos = std::find (ExtElements.begin (), end, GID);
+        if (pos == end) {
+          ExtElements.push_back (GID);
+          mylist[count] = GID;
+          ++count;
+        }
       }
-    }
-    namespace KE = Kokkos::Experimental;
-    if (overlap > 0) {
-      //printf("%d: sort/unique\n",mypid); fflush(stdout);
-      std::sort(KE::begin(ExtElements_h),KE::end(ExtElements_h));
-      std::unique(KE::begin(ExtElements_h),KE::end(ExtElements_h));
-      //Kokkos::sort(ExtElements_h,0,globalCount_h); //TODO FIXME
-      //KE::unique(execution_space(),KE::begin(ExtElements_h),KE::end(ExtElements_h));
     }
 
     // On last import round, TmpMap, TmpGraph, and TmpImporter are unneeded,
     // so don't build them.
     if (overlap + 1 < OverlapLevel_) {
       //map consisting of GIDs that are in the current halo level-set
-      Kokkos::deep_copy(mylist,mylist_h);
-      TmpMap = rcp (new map_type (global_invalid, mylist,
+      TmpMap = rcp (new map_type (global_invalid, mylist (0, count),
                                   Teuchos::OrdinalTraits<global_ordinal_type>::zero (),
                                   A_->getComm ()));
       //graph whose rows are the current halo level-set to import
@@ -169,27 +146,21 @@ OverlappingRowMatrix (const Teuchos::RCP<const row_matrix_type>& A,
       TmpGraph->fillComplete (A_->getDomainMap (), TmpMap);
     }
   } // end overlap loop
+  ExtHaloStarts_h[OverlapLevel_] = (size_t) ExtElements.size();
+  Kokkos::deep_copy(ExtHaloStarts_,ExtHaloStarts_h);
 
-  //printf("%d: finished big import loop\n",mypid); fflush(stdout);
-  A_->getComm()->barrier();
-
-  //record index of start of last halo level-set
-  //FIXME
-  //ExtHaloStarts_[OverlapLevel_] = (size_t) ExtElements.size();
-
-  // build the map containing all the nodes (original matrix + extended matrix)
-  Kokkos::deep_copy(ExtElements,ExtElements_h);
-  Kokkos::View<global_ordinal_type*, device_type> mylist("local plus halo GIDs", numMyRowsA + ExtElements.size ());
-  typename Kokkos::View<global_ordinal_type*, device_type>::HostMirror mylist_h = Kokkos::create_mirror_view(mylist);
+  // build the map containing all the nodes (original
+  // matrix + extended matrix)
+  Array<global_ordinal_type> mylist (numMyRowsA + ExtElements.size ());
   for (local_ordinal_type i = 0; (size_t)i < numMyRowsA; ++i) {
-    mylist_h(i) = A_->getRowMap ()->getGlobalElement (i);
+    mylist[i] = A_->getRowMap ()->getGlobalElement (i);
   }
-  for (local_ordinal_type i = 0; (size_t)i < ExtElements.size (); ++i) {
-    mylist_h(i + numMyRowsA) = ExtElements_h(i);
+  for (local_ordinal_type i = 0; i < ExtElements.size (); ++i) {
+    mylist[i + numMyRowsA] = ExtElements[i];
   }
-  Kokkos::deep_copy(mylist,mylist_h);
 
-  RowMap_ = rcp (new map_type (global_invalid, mylist_h(), /*mylist(),*/
+
+  RowMap_ = rcp (new map_type (global_invalid, mylist (),
                                Teuchos::OrdinalTraits<global_ordinal_type>::zero (),
                                A_->getComm ()));
   Importer_ = rcp (new import_type (A_->getRowMap (), RowMap_));
@@ -197,12 +168,10 @@ OverlappingRowMatrix (const Teuchos::RCP<const row_matrix_type>& A,
 
   // now build the map corresponding to all the external nodes
   // (with respect to A().RowMatrixRowMap().
-  ExtMap_ = rcp (new map_type (global_invalid, ExtElements_h(), /*ExtElements (),*/
+  ExtMap_ = rcp (new map_type (global_invalid, ExtElements (),
                                Teuchos::OrdinalTraits<global_ordinal_type>::zero (),
                                A_->getComm ()));
   ExtImporter_ = rcp (new import_type (A_->getRowMap (), ExtMap_));
-
-  //printf("%d: finished building ExtImporter_\n",mypid); fflush(stdout);
 
   {
     RCP<crs_matrix_type> ExtMatrix_nc =
@@ -227,13 +196,16 @@ OverlappingRowMatrix (const Teuchos::RCP<const row_matrix_type>& A,
     NumGlobalNonzeros_ = outArray[0];
     NumGlobalRows_ = outArray[1];
   }
+  // reduceAll<int, GST> (* (A_->getComm ()), REDUCE_SUM, NumMyNonzeros_tmp,
+  //                      outArg (NumGlobalNonzeros_));
+  // reduceAll<int, GST> (* (A_->getComm ()), REDUCE_SUM, NumMyRows_tmp,
+  //                      outArg (NumGlobalRows_));
 
   MaxNumEntries_ = A_->getLocalMaxNumRowEntries ();
   if (MaxNumEntries_ < ExtMatrix_->getLocalMaxNumRowEntries ()) {
     MaxNumEntries_ = ExtMatrix_->getLocalMaxNumRowEntries ();
   }
 
-  //printf("%d: starting to create RowGraph\n",mypid); fflush(stdout);
   // Create the graph (returned by getGraph()).
   typedef Details::OverlappingRowGraph<row_graph_type> row_graph_impl_type;
   RCP<row_graph_impl_type> graph =
@@ -252,7 +224,6 @@ OverlappingRowMatrix (const Teuchos::RCP<const row_matrix_type>& A,
   // Resize temp arrays
   Kokkos::resize(Indices_,MaxNumEntries_);
   Kokkos::resize(Values_,MaxNumEntries_);
-  //printf("%d: finished OverlappingRowMatrix ctor\n",mypid); fflush(stdout);
 }
 
 
@@ -262,6 +233,8 @@ OverlappingRowMatrix<MatrixType>::getComm () const
 {
   return A_->getComm ();
 }
+
+
 
 
 template<class MatrixType>
@@ -434,6 +407,29 @@ bool OverlappingRowMatrix<MatrixType>::isFillComplete() const
   return true;
 }
 
+
+template<class MatrixType>
+void
+OverlappingRowMatrix<MatrixType>::
+ getGlobalRowCopy (global_ordinal_type GlobalRow,
+                   nonconst_global_inds_host_view_type &Indices,
+                   nonconst_values_host_view_type &Values,
+                   size_t& NumEntries) const
+{
+  throw std::runtime_error("Ifpack2::OverlappingRowMatrix::getGlobalRowCopy() not supported.");
+}
+
+template<class MatrixType>
+void
+OverlappingRowMatrix<MatrixType>::
+  getLocalRowCopy (local_ordinal_type LocalRow,
+                   nonconst_local_inds_host_view_type &Indices,
+                   nonconst_values_host_view_type &Values,
+                   size_t& NumEntries) const
+{
+  throw std::runtime_error("Ifpack2::OverlappingRowMatrix::getLocalRowCopy() not supported.");
+}
+
 template<class MatrixType>
 void
 OverlappingRowMatrix<MatrixType>::
@@ -469,27 +465,6 @@ OverlappingRowMatrix<MatrixType>::
   }
 
 }
-
-template<class MatrixType>
-void
-OverlappingRowMatrix<MatrixType>::
-getGlobalRowCopy (global_ordinal_type GlobalRow,
-                  nonconst_global_inds_host_view_type &Indices,
-                  nonconst_values_host_view_type &Values,
-                  size_t& NumEntries) const {
-  throw std::runtime_error("Ifpack2::OverlappingRowMatrix::getGlobalRowCopy() not supported.");
-}
-
-template<class MatrixType>
-void
-OverlappingRowMatrix<MatrixType>::
-  getLocalRowCopy (local_ordinal_type LocalRow,
-                   nonconst_local_inds_host_view_type &Indices,
-                   nonconst_values_host_view_type &Values,
-                   size_t& NumEntries) const {
-  throw std::runtime_error("Ifpack2::OverlappingRowMatrix::getLocalRowCopy() not supported.");
-}
-
 
 #ifdef TPETRA_ENABLE_DEPRECATED_CODE
 template<class MatrixType>
@@ -577,7 +552,7 @@ void
 OverlappingRowMatrix<MatrixType>::
 rightScale (const Tpetra::Vector<scalar_type, local_ordinal_type, global_ordinal_type, node_type>& /* x */)
 {
-  throw std::runtime_error("Ifpack2::OverlappingRowMatrix does not support rightScale.");
+  throw std::runtime_error("Ifpack2::OverlappingRowMatrix does not support leftScale.");
 }
 
 
@@ -685,7 +660,183 @@ template<class MatrixType>
 void OverlappingRowMatrix<MatrixType>::describe(Teuchos::FancyOStream &out,
             const Teuchos::EVerbosityLevel verbLevel) const
 {
-  //TODO
+    using std::endl;
+    using std::setw;
+    using Teuchos::as;
+    using Teuchos::VERB_DEFAULT;
+    using Teuchos::VERB_NONE;
+    using Teuchos::VERB_LOW;
+    using Teuchos::VERB_MEDIUM;
+    using Teuchos::VERB_HIGH;
+    using Teuchos::VERB_EXTREME;
+    using Teuchos::RCP;
+    using Teuchos::null;
+    using Teuchos::ArrayView;
+
+    Teuchos::EVerbosityLevel vl = verbLevel;
+    if (vl == VERB_DEFAULT) {
+      vl = VERB_LOW;
+    }
+    RCP<const Teuchos::Comm<int> > comm = this->getComm();
+    const int myRank = comm->getRank();
+    const int numProcs = comm->getSize();
+    size_t width = 1;
+    for (size_t dec=10; dec<getGlobalNumRows(); dec *= 10) {
+      ++width;
+    }
+    width = std::max<size_t> (width, as<size_t> (11)) + 2;
+    Teuchos::OSTab tab(out);
+    //    none: print nothing
+    //     low: print O(1) info from node 0
+    //  medium: print O(P) info, num entries per process
+    //    high: print O(N) info, num entries per row
+    // extreme: print O(NNZ) info: print indices and values
+    //
+    // for medium and higher, print constituent objects at specified verbLevel
+    if (vl != VERB_NONE) {
+      if (myRank == 0) {
+        out << this->description() << std::endl;
+      }
+      // O(1) globals, minus what was already printed by description()
+      //if (isFillComplete() && myRank == 0) {
+      //  out << "Global max number of entries in a row: " << getGlobalMaxNumRowEntries() << std::endl;
+      //}
+      // constituent objects
+      if (vl == VERB_MEDIUM || vl == VERB_HIGH || vl == VERB_EXTREME) {
+        if (myRank == 0) {
+          out << endl << "Row map:" << endl;
+        }
+        getRowMap()->describe(out,vl);
+        //
+        if (getColMap() != null) {
+          if (getColMap() == getRowMap()) {
+            if (myRank == 0) {
+              out << endl << "Column map is row map.";
+            }
+          }
+          else {
+            if (myRank == 0) {
+              out << endl << "Column map:" << endl;
+            }
+            getColMap()->describe(out,vl);
+          }
+        }
+        if (getDomainMap() != null) {
+          if (getDomainMap() == getRowMap()) {
+            if (myRank == 0) {
+              out << endl << "Domain map is row map.";
+            }
+          }
+          else if (getDomainMap() == getColMap()) {
+            if (myRank == 0) {
+              out << endl << "Domain map is column map.";
+            }
+          }
+          else {
+            if (myRank == 0) {
+              out << endl << "Domain map:" << endl;
+            }
+            getDomainMap()->describe(out,vl);
+          }
+        }
+        if (getRangeMap() != null) {
+          if (getRangeMap() == getDomainMap()) {
+            if (myRank == 0) {
+              out << endl << "Range map is domain map." << endl;
+            }
+          }
+          else if (getRangeMap() == getRowMap()) {
+            if (myRank == 0) {
+              out << endl << "Range map is row map." << endl;
+            }
+          }
+          else {
+            if (myRank == 0) {
+              out << endl << "Range map: " << endl;
+            }
+            getRangeMap()->describe(out,vl);
+          }
+        }
+        if (myRank == 0) {
+          out << endl;
+        }
+      }
+      // O(P) data
+      if (vl == VERB_MEDIUM || vl == VERB_HIGH || vl == VERB_EXTREME) {
+        for (int curRank = 0; curRank < numProcs; ++curRank) {
+          if (myRank == curRank) {
+            out << "Process rank: " << curRank << std::endl;
+            out << "  Number of entries: " << getLocalNumEntries() << std::endl;
+            out << "  Max number of entries per row: " << getLocalMaxNumRowEntries() << std::endl;
+          }
+          comm->barrier();
+          comm->barrier();
+          comm->barrier();
+        }
+      }
+      // O(N) and O(NNZ) data
+      if (vl == VERB_HIGH || vl == VERB_EXTREME) {
+        for (int curRank = 0; curRank < numProcs; ++curRank) {
+          if (myRank == curRank) {
+            out << std::setw(width) << "Proc Rank"
+                << std::setw(width) << "Global Row"
+                << std::setw(width) << "Num Entries";
+            if (vl == VERB_EXTREME) {
+              out << std::setw(width) << "(Index,Value)";
+            }
+            out << endl;
+            for (size_t r = 0; r < getLocalNumRows (); ++r) {
+              const size_t nE = getNumEntriesInLocalRow(r);
+              typename MatrixType::global_ordinal_type gid = getRowMap()->getGlobalElement(r);
+              out << std::setw(width) << myRank
+                  << std::setw(width) << gid
+                  << std::setw(width) << nE;
+              if (vl == VERB_EXTREME) {
+                if (isGloballyIndexed()) {
+                  global_inds_host_view_type rowinds;
+                  values_host_view_type rowvals;
+                  getGlobalRowView (gid, rowinds, rowvals);
+                  for (size_t j = 0; j < nE; ++j) {
+                    out << " (" << rowinds[j]
+                        << ", " << rowvals[j]
+                        << ") ";
+                  }
+                }
+                else if (isLocallyIndexed()) {
+                  local_inds_host_view_type rowinds;
+                  values_host_view_type rowvals;
+                  getLocalRowView (r, rowinds, rowvals);
+                  for (size_t j=0; j < nE; ++j) {
+                    out << " (" << getColMap()->getGlobalElement(rowinds[j])
+                        << ", " << rowvals[j]
+                        << ") ";
+                  }
+                } // globally or locally indexed
+              } // vl == VERB_EXTREME
+              out << endl;
+            } // for each row r on this process
+
+          } // if (myRank == curRank)
+          comm->barrier();
+          comm->barrier();
+          comm->barrier();
+        }
+
+        out.setOutputToRootOnly(0);
+        out << "===========\nlocal matrix\n=================" << std::endl;
+        out.setOutputToRootOnly(-1);
+        A_->describe(out,Teuchos::VERB_EXTREME);
+        out.setOutputToRootOnly(0);
+        out << "===========\nend of local matrix\n=================" << std::endl;
+        comm->barrier();
+        out.setOutputToRootOnly(0);
+        out << "=================\nghost matrix\n=================" << std::endl;
+        out.setOutputToRootOnly(-1);
+        ExtMatrix_->describe(out,Teuchos::VERB_EXTREME);
+        out.setOutputToRootOnly(0);
+        out << "===========\nend of ghost matrix\n=================" << std::endl;
+      }
+    }
 }
 
 template<class MatrixType>
@@ -703,11 +854,19 @@ OverlappingRowMatrix<MatrixType>::getExtMatrix() const
 }
 
 template<class MatrixType>
-Teuchos::ArrayView<const size_t> OverlappingRowMatrix<MatrixType>::getExtHaloStarts() const
+Kokkos::View<size_t*, typename OverlappingRowMatrix<MatrixType>::device_type>
+OverlappingRowMatrix<MatrixType>::getExtHaloStarts() const
 {
-  //return ExtHaloStarts_();
-  throw std::runtime_error("Ifpack2::OverlappingRowMatrix::getExtHaloStarts() not supported.");
+  return ExtHaloStarts_;
 }
+
+template<class MatrixType>
+typename Kokkos::View<size_t*, typename OverlappingRowMatrix<MatrixType>::device_type>::HostMirror
+OverlappingRowMatrix<MatrixType>::getExtHaloStartsHost() const
+{
+  return ExtHaloStarts_h;
+}
+
 
 } // namespace Ifpack2
 
