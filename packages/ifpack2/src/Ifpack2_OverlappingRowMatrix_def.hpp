@@ -466,45 +466,6 @@ OverlappingRowMatrix<MatrixType>::
 
 }
 
-#ifdef TPETRA_ENABLE_DEPRECATED_CODE
-template<class MatrixType>
-void
-OverlappingRowMatrix<MatrixType>::
-getGlobalRowCopy (global_ordinal_type GlobalRow,
-                  const Teuchos::ArrayView<global_ordinal_type> &Indices,
-                  const Teuchos::ArrayView<scalar_type> &Values,
-                  size_t &NumEntries) const {
-  throw std::runtime_error("Ifpack2::OverlappingRowMatrix::getGlobalRowCopy() with Teuchos Arrays not supported.");
-}
-template<class MatrixType>
-void
-OverlappingRowMatrix<MatrixType>::
-getLocalRowCopy (local_ordinal_type LocalRow,
-                 const Teuchos::ArrayView<local_ordinal_type> &Indices,
-                 const Teuchos::ArrayView<scalar_type> &Values,
-                 size_t &NumEntries) const {
-  throw std::runtime_error("Ifpack2::OverlappingRowMatrix::getLocalRowCopy() with Teuchos Arrays not supported.");
-}
-
-template<class MatrixType>
-void
-OverlappingRowMatrix<MatrixType>::
-getGlobalRowView (global_ordinal_type GlobalRow,
-                  Teuchos::ArrayView<const global_ordinal_type> &indices,
-                  Teuchos::ArrayView<const scalar_type> &values) const {
-  throw std::runtime_error("Ifpack2::OverlappingRowMatrix::getGlobalRowView() with Teuchos Arrays not supported.");
-}
-
-template<class MatrixType>
-void
-OverlappingRowMatrix<MatrixType>::
-getLocalRowView (local_ordinal_type LocalRow,
-                 Teuchos::ArrayView<const local_ordinal_type> &indices,
-                 Teuchos::ArrayView<const scalar_type> &values) const {
-  throw std::runtime_error("Ifpack2::OverlappingRowMatrix::getLocalRowView() with Teuchos Arrays not supported.");
-}
-#endif
-
 template<class MatrixType>
 void
 OverlappingRowMatrix<MatrixType>::
