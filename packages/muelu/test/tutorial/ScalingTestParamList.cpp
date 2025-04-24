@@ -12,12 +12,14 @@
 #include <iostream>
 
 #include <Teuchos_XMLParameterListHelpers.hpp>
+#include <Teuchos_StackedTimer.hpp>
 
 #include <Tpetra_KokkosCompat_DefaultNode.hpp>  // For Epetra only runs this points to FakeKokkos in Xpetra
 
 #include "Xpetra_ConfigDefs.hpp"
 #include <Xpetra_MultiVectorFactory.hpp>
 #include <Xpetra_ImportFactory.hpp>
+#include <Xpetra_IO.hpp>
 
 // Galeri
 #include <Galeri_XpetraParameters.hpp>
@@ -45,13 +47,9 @@
 #include <BelosMueLuAdapter.hpp>   // => This header defines Belos::MueLuOp
 #endif
 
-// Define default data types
-typedef double Scalar;
-typedef int LocalOrdinal;
-typedef int GlobalOrdinal;
-typedef KokkosClassic::DefaultNode::DefaultNodeType Node;
-
-int main(int argc, char* argv[]) {
+template<class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
+int main_(Teuchos::CommandLineProcessor &clp, Xpetra::UnderlyingLib& lib, int argc, char *argv[])
+{
 #include <MueLu_UseShortNames.hpp>
 
   using Teuchos::ArrayRCP;
@@ -63,7 +61,6 @@ int main(int argc, char* argv[]) {
   // =========================================================================
   // MPI initialization using Teuchos
   // =========================================================================
-  Teuchos::GlobalMPISession mpiSession(&argc, &argv, NULL);
   RCP<const Teuchos::Comm<int> > comm = Teuchos::DefaultComm<int>::getComm();
 
   // =========================================================================
@@ -75,7 +72,6 @@ int main(int argc, char* argv[]) {
   // =========================================================================
   // Parameters initialization
   // =========================================================================
-  Teuchos::CommandLineProcessor clp(false);
 
   GO nx = 100, ny = 100, nz = 100;
   Galeri::Xpetra::Parameters<GO> galeriParameters(clp, nx, ny, nz, "Laplace2D");  // manage parameters of the test case
@@ -108,8 +104,6 @@ int main(int argc, char* argv[]) {
   TEUCHOS_TEST_FOR_EXCEPTION(xmlFileName=="", std::runtime_error,
       "You need to specify the xml-file via the command line argument '--xml=<path/to/xml_file>'.");
 
-  Xpetra::UnderlyingLib lib = xpetraParameters.GetLib();
-
   ParameterList paramList;
   Teuchos::updateParametersFromXmlFileAndBroadcast(xmlFileName, Teuchos::Ptr<ParameterList>(&paramList), *comm);
   bool isDriver = paramList.isSublist("Run1");
@@ -133,7 +127,8 @@ int main(int argc, char* argv[]) {
   // =========================================================================
   std::ostringstream galeriStream;
   comm->barrier();
-  RCP<TimeMonitor> globalTimeMonitor = rcp(new TimeMonitor(*TimeMonitor::getNewTimer("ScalingTest: S - Global Time")));
+  Teuchos::RCP<Teuchos::StackedTimer> stacked_timer = rcp(new Teuchos::StackedTimer("ScalingTest: S - Global Time"));
+  Teuchos::TimeMonitor::setStackedTimer(stacked_timer);
   RCP<TimeMonitor> tm                = rcp(new TimeMonitor(*TimeMonitor::getNewTimer("ScalingTest: 1 - Matrix Build")));
 
   RCP<Matrix> A;
@@ -163,7 +158,7 @@ int main(int argc, char* argv[]) {
       coordinates = Galeri::Xpetra::Utils::CreateCartesianCoordinates<SC, LO, GO, Map, MultiVector>("1D", map, galeriList);
 
     } else if (matrixType == "Laplace2D" || matrixType == "Star2D" ||
-               matrixType == "BigStar2D" || matrixType == "Elasticity2D") {
+               matrixType == "BigStar2D" || matrixType == "Elasticity2D" || matrixType == "Recirc2D") {
       map         = Galeri::Xpetra::CreateMap<LO, GO, Node>(xpetraParameters.GetLib(), "Cartesian2D", comm, galeriList);
       coordinates = Galeri::Xpetra::Utils::CreateCartesianCoordinates<SC, LO, GO, Map, MultiVector>("2D", map, galeriList);
 
@@ -214,7 +209,7 @@ int main(int argc, char* argv[]) {
       // Tpetra matrix reader is still broken, so instead we read in
       // a matrix in a binary format and then redistribute it
       const bool binaryFormat = true;
-      A                       = Utils::Read(matrixFile, lib, comm, binaryFormat);
+      A                       = Xpetra::IO<SC, LO, GO, Node>::Read(matrixFile, lib, comm, binaryFormat);
 
       if (!map.is_null()) {
         RCP<Matrix> newMatrix = MatrixFactory::Build(map, 1);
@@ -311,6 +306,9 @@ int main(int argc, char* argv[]) {
         }
         if (runList.isParameter("solver")) solveType = runList.get<std::string>("solver");
         if (runList.isParameter("tol")) tol = runList.get<double>("tol");
+
+        stacked_timer = rcp(new Teuchos::StackedTimer("ScalingTest: S - Global Time"));
+        Teuchos::TimeMonitor::setStackedTimer(stacked_timer);
       }
 
       // Instead of checking each time for rank, create a rank 0 stream
@@ -329,6 +327,7 @@ int main(int argc, char* argv[]) {
       RCP<HierarchyManager> mueLuFactory = rcp(new ParameterListInterpreter(mueluList));
       //! [HierarchyManager end]
       comm->barrier();
+      tm = Teuchos::null;
       tm = rcp(new TimeMonitor(*TimeMonitor::getNewTimer("ScalingTest: 2 - MueLu Setup")));
       //! [HierarchyObject begin]
       RCP<Hierarchy> H;
@@ -364,7 +363,7 @@ int main(int argc, char* argv[]) {
         X->randomize();
         A->apply(*X, *B, Teuchos::NO_TRANS, one, zero);
 
-        Teuchos::Array<STS::magnitudeType> norms(1);
+        Teuchos::Array<typename STS::magnitudeType> norms(1);
         B->norm2(norms);
         B->scale(one / norms[0]);
         X->putScalar(zero);
@@ -460,10 +459,14 @@ int main(int argc, char* argv[]) {
       }
       comm->barrier();
       tm                = Teuchos::null;
-      globalTimeMonitor = Teuchos::null;
 
-      if (printTimings)
-        TimeMonitor::summarize(A->getRowMap()->getComm().ptr(), std::cout, false, true, false, Teuchos::Union, "", true);
+      if (printTimings) {
+        //TimeMonitor::summarize(A->getRowMap()->getComm().ptr(), std::cout, false, true, false, Teuchos::Union, "", true);
+        stacked_timer->stopBaseTimer();
+        Teuchos::StackedTimer::OutputOptions options;
+        options.output_fraction = options.output_histogram = options.output_minmax = true;
+        stacked_timer->report(out, comm, options);
+      }
 
       TimeMonitor::clearCounters();
 
@@ -484,5 +487,13 @@ int main(int argc, char* argv[]) {
     } while (stop == false);
   }
 
-  return 0;
-}  // main
+  return EXIT_SUCCESS;
+}  // main_
+
+//-----------------------------------------------------------
+#define MUELU_AUTOMATIC_TEST_ETI_NAME main_
+#include "MueLu_Test_ETI.hpp"
+
+int main(int argc, char *argv[]) {
+  return Automatic_Test_ETI(argc,argv);
+}
