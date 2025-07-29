@@ -13,6 +13,8 @@
 ![GitHub contributors](https://img.shields.io/github/contributors/trilinos/Trilinos)
 ![GitHub commit activity](https://img.shields.io/github/commit-activity/w/trilinos/Trilinos)
 
+Never gonna give you up.
+
 
 The Trilinos Project is an effort to develop algorithms and enabling
 technologies within an object-oriented software framework for the solution of
