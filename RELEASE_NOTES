@@ -1,5 +1,129 @@
 ###############################################################################
 #                                                                             #
+# Trilinos Release 18.0.0 Release Notes                     December XX, 2026 #
+#                                                                             #
+###############################################################################
+
+
+Belos, Stratimikos:
+
+  - Expose the PseudoBlockCG condition number estimate through Thyra::SolveStatus
+    in Stratimikos.
+    https://github.com/trilinos/Trilinos/pull/15887
+
+
+Compadre:
+
+  - Inclusion of version 1.7.6
+    https://github.com/trilinos/Trilinos/pull/15894
+
+
+Ifpack2:
+
+  - Faster tridiagonal solve (SolveTridiags) using mdspan.
+    https://github.com/trilinos/Trilinos/pull/15826
+
+  - AdditiveSchwarz with an Amesos2 subdomain solver now updates matrix values
+    when reused.
+    https://github.com/trilinos/Trilinos/pull/15910
+
+
+Intrepid2:
+
+  - Add PAMatrix, a partial-assembly (matrix-free) operator for tensor-product
+    integrals.
+    https://github.com/trilinos/Trilinos/pull/15871
+
+  - Remove deprecated code.
+    https://github.com/trilinos/Trilinos/pull/15903
+
+
+Krino:
+
+  - Latest snapshot.
+    https://github.com/trilinos/Trilinos/pull/15840
+
+
+MueLu:
+
+  - Ongoing work on fast triple matrix products for structured problems
+    (StructuredRAPKernel).
+    https://github.com/trilinos/Trilinos/pull/15803
+
+  - Removal of PermutationFactory.
+    https://github.com/trilinos/Trilinos/pull/15858
+
+
+Phalanx:
+
+  - Option to disable the evaluator index in timer names.
+    https://github.com/trilinos/Trilinos/pull/15877
+
+
+Piro:
+
+  - Improvements to steady and transient optimization, including time-integrated
+    and sum-over-times objectives.
+    https://github.com/trilinos/Trilinos/pull/15857
+    https://github.com/trilinos/Trilinos/pull/15864
+
+
+ROL:
+
+  - Latest snapshot.
+    https://github.com/trilinos/Trilinos/pull/15837
+    https://github.com/trilinos/Trilinos/pull/15839
+
+
+SEACAS:
+
+  - Inclusion of release v2026-11-12.
+    https://github.com/trilinos/Trilinos/pull/15945
+
+
+ShyLU:
+
+  - Tacho: fix non-pivoting LDL for small matrices.
+    https://github.com/trilinos/Trilinos/pull/15932
+
+
+STK:
+
+  - Latest snapshots.
+    https://github.com/trilinos/Trilinos/pull/15872
+    https://github.com/trilinos/Trilinos/pull/15946
+
+
+Tempus:
+
+  - Adjoint sensitivities for distributed-in-time responses and index-1 DAEs.
+    https://github.com/trilinos/Trilinos/pull/15849
+
+
+Tpetra:
+
+  - Scalable binary IO.
+    https://github.com/trilinos/Trilinos/pull/15678
+
+  - New SpMV kernel for newer CUDA platforms.
+    https://github.com/trilinos/Trilinos/pull/15928
+
+  - Shortcuts in SpAdd when the matrix graphs match.
+    https://github.com/trilinos/Trilinos/pull/15937
+
+
+Zoltan:
+
+  - Harden bounds and validation checks in communication, DDirectory, LB
+    serialization/migration, and filename construction.
+    https://github.com/trilinos/Trilinos/pull/15904
+    https://github.com/trilinos/Trilinos/pull/15906
+    https://github.com/trilinos/Trilinos/pull/15907
+    https://github.com/trilinos/Trilinos/pull/15908
+
+
+###############################################################################
+#                                                                             #
 # Trilinos Release 17.3.0 Release Notes                     November XX, 2026 #
 #                                                                             #
 ###############################################################################
@@ -81,6 +205,12 @@ Teko:
   - Add a user guide and improved documentation.
     https://github.com/trilinos/Trilinos/pull/15666
     
+
+Thyra:
+
+  - TpetraAdapters: add extraction methods for block vectors and multivectors.
+    https://github.com/trilinos/Trilinos/pull/15874
+
 
 Tpetra:
 
